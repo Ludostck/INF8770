@@ -1,11 +1,10 @@
-import sys
+import matplotlib
 import numpy as np
 import matplotlib.pyplot as py
 from numpy import linalg as LA, strings
-# from skimage.metrics import structural_similarity, peak_signal_noise_ratio
+from skimage.metrics import structural_similarity, peak_signal_noise_ratio
 from scipy.ndimage import convolve
 
-image_path = "./data/kodim01.png"
 
 # CHAT gpt generated
 def ssim(image1, image2, window_size=11, C1=1e-4, C2=9e-4):
@@ -62,7 +61,7 @@ def Kl(image):
     MoyG= sommeG / nbPixels
     MoyB= sommeB / nbPixels
 
-    covRGB = np.zeros((3,3), dtype = "float")
+    covRGB = np.zeros((3,3), dtype = "double")
     for i in range(len(image)):
         for j in range(len(image[0])):
             vecTemp=[[image[i][j][0] - MoyR], [image[i][j][1]] - MoyG, [image[i][j][2] - MoyB]]
@@ -103,16 +102,16 @@ def Kl(image):
 
 def ReadImage(imageName):
     imagelue = py.imread('./data/' + imageName + ".png")
-    return imagelue.astype('float')
+    return imagelue.astype('double')
 
 def ReadTransformedImage(imageName, quantificatorID):
     imagelue = py.imread("data_transform/" + imageName + "_" + str(quantificatorID) + ".png")
-    return imagelue.astype('float')
+    return imagelue.astype('double')
 
 def SaveImage(image, imageName, quantificatorID):
     py.figure(figsize = (10,10))
     imageout = np.clip(image,0, 1)
-    imageout= imageout.astype('float')
+    imageout= imageout.astype('double')
     py.imsave("data_transform/" + imageName + "_" + str(quantificatorID) + ".png", imageout)
 
 def ApplyQuantificator(image, quantificator):
@@ -164,66 +163,108 @@ def YUV2RGB(imageYUV):
     return imageRGB
 
 def QualityCalculator(image, transformImage):
-    # print("PSNR")
-    # print(peak_signal_noise_ratio(image, transformImage))
-    print("SSIM")
-    print(ssim(image, transformImage))
-    return
+    psnrImage = peak_signal_noise_ratio(image, transformImage)
+    ssimImage = ssim(image, transformImage)
+    return psnrImage, ssimImage
 
 def ComputeImage(imageName):
 
     quantificator  = [[255, 255, 255],[255, 255, 15],[255, 255, 0],[255, 15, 15]]
     imageNameVec = []
-    tauxDeCompressionVec = []
-    # psnrVec = []
-    # ssimVec = []
+    # tauxDeCompressionVec = []
+    psnrVec = []
+    ssimVec = []
+
+    imageRGB = ReadImage(imageName)
+    transformImageRGBSansQuantificateur = Kl(imageRGB)
 
     for i in range(len(quantificator)):
-        image = ReadImage(imageName)
+        imageAvecQuantificateur = np.copy(transformImageRGBSansQuantificateur)
+        ApplyQuantificator(imageAvecQuantificateur, quantificator[i])
+
+        # Sauvegarde de l'image
         imageNameSave = imageName + "RGB"
-        imageNameVec.append(imageNameSave)
-        transformImage = Kl(image)
-        ApplyQuantificator(transformImage, quantificator[i])
-        SaveImage(transformImage, imageNameSave, i)
+        imageNameVec.append(imageNameSave[5:] + "_" + str(i))
+        SaveImage(imageAvecQuantificateur, imageNameSave, i)
 
-        imageTransformed = ReadTransformedImage(imageNameSave, i)
-        ogImageSize = sys.getsizeof(image)
-        transforedImageSize = sys.getsizeof(imageTransformed)
-        tauxDeCompression = 1 - (transforedImageSize/ogImageSize)
-        tauxDeCompressionVec.append(tauxDeCompression)
-        print(f'OG:{ogImageSize}')
-        print(f'Transformed:{transforedImageSize}')
-        print(f'Taux de compresssion:{tauxDeCompression}')
+        # Calcul de la qualité de la transformation
+        psnr, ssimImage = QualityCalculator(imageRGB, imageAvecQuantificateur)
+        psnrVec.append(psnr)
+        ssimVec.append(ssimImage)
 
+        # Calcul de compressions
+        # imageTransformed = ReadTransformedImage(imageNameSave, i)
+        # ogImageSize = sys.getsizeof(imageRGB)
+        # transforedImageSize = sys.getsizeof(imageTransformed)
+        # tauxDeCompression = 1 - (transforedImageSize/ogImageSize)
+        # tauxDeCompressionVec.append(tauxDeCompression)
+        # print(imageNameSave + " Quantificateur " + str(i))
+        # print(f'OG:{ogImageSize}')
+        # print(f'Transformed:{transforedImageSize}')
+        # print(f'Taux de compresssion:{tauxDeCompression}')
+
+    # Transforme l'image RGB en YUV
+    imageYUV = RGB2YUV(imageRGB)
+
+    # Applique la transformation KL
+    transformImageYUVSansQuantificateur = Kl(imageYUV)
 
     for i in range(len(quantificator)):
-        image = ReadImage(imageName)
+
+        imageYUVSansQuantificateurCopy = np.copy(transformImageYUVSansQuantificateur)
+        # Applique les quantificateurs
+        ApplyQuantificator(imageYUVSansQuantificateurCopy, quantificator[i])
+        imageAvecQuantificateur = YUV2RGB(imageYUVSansQuantificateurCopy)
+
+        # Calcul SSIM et PSNR
+        QualityCalculator(imageRGB, imageAvecQuantificateur)
+        
+        # Save image
         imageNameSave = imageName + "YUV"
-        transformImage = Kl(image)
-        transformImage = YUV2RGB(transformImage)
-        # QualityCalculator(image, transformImage)
-        ApplyQuantificator(transformImage, quantificator[i])
+        imageNameVec.append(imageNameSave[5:] + "_" + str(i))
+        SaveImage(imageAvecQuantificateur, imageNameSave, i)
 
-        SaveImage(transformImage, imageNameSave, i)
+        # Calcul de la qualité de la transformation
+        psnr, ssimImage = QualityCalculator(imageRGB, imageAvecQuantificateur)
+        psnrVec.append(psnr)
+        ssimVec.append(ssimImage)
+        # Calcul de compressions
+        # imageTransformed = ReadTransformedImage(imageNameSave, i)
+        # ogImageSize = sys.getsizeof(imageRGB)
+        # transforedImageSize = sys.getsizeof(imageTransformed)
+        # tauxDeCompression = 1 - (transforedImageSize/ogImageSize)
+        # tauxDeCompressionVec.append(tauxDeCompression)
+        # print(imageNameSave + " Quantificateur " + str(i))
+        # print(f'OG:{ogImageSize}')
+        # print(f'Transformed:{transforedImageSize}')
+        # print(f'Taux de compresssion:{tauxDeCompression}')
+    GraphSSIM(imageNameVec, ssimVec, imageName)
+    GraphPSNR(imageNameVec, psnrVec, imageName)
+    return
 
-if __name__ == "__main__":
+def CalculeImage(): 
     ComputeImage("kodim01")
     ComputeImage("kodim02")
     ComputeImage("kodim05")
     ComputeImage("kodim13")
     ComputeImage("kodim23")
+    return 
 
+def GraphSSIM(imageNameVec, dataVec, imageName):
+    py.bar(imageNameVec, dataVec)
+    py.title("SSIM")
+    py.xlabel("Image")
+    py.ylabel("ssim")
+    py.savefig("./graph/" + imageName + "_ssim")
+    return
 
+def GraphPSNR(imageNameVec, dataVec, imageName):
+    py.bar(imageNameVec, dataVec)
+    py.title("PSNR")
+    py.xlabel("Image")
+    py.ylabel("psnr")
+    py.savefig("./graph/" + imageName + "_psnr")
+    return
 
-
-
-
-
-
-
-
-
-
-
-
-
+if __name__ == "__main__":
+    CalculeImage()
