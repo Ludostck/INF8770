@@ -108,6 +108,8 @@ def huffman_compression_image(image_path):
     img_array = np.array(img)
     pixels = img_array.reshape(-1, 3)
 
+    print(pixels)
+
     #les pixels uniques et leurs fréquences
     pixels_tuple = [tuple(pixel) for pixel in pixels]
     frequencies = Counter(pixels_tuple)
