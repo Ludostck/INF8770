@@ -1,7 +1,8 @@
+import sys
 import numpy as np
 import matplotlib.pyplot as py
 from numpy import linalg as LA, strings
-from skimage.metrics import structural_similarity, peak_signal_noise_ratio
+# from skimage.metrics import structural_similarity, peak_signal_noise_ratio
 from scipy.ndimage import convolve
 
 image_path = "./data/kodim01.png"
@@ -43,6 +44,7 @@ def ssim(image1, image2, window_size=11, C1=1e-4, C2=9e-4):
     
     return ssim_index
 
+# Est basé sur le code cours ici:https: github.com/gabilodeau/INF8770/blob/master/Transformee%20KL%20sur%20image.ipynb
 def Kl(image):
 
     # Calcul des valeurs moyennes des RGB. Nécessaire pour calculer la matrice de covariance des RGB
@@ -60,7 +62,7 @@ def Kl(image):
     MoyG= sommeG / nbPixels
     MoyB= sommeB / nbPixels
 
-    covRGB = np.zeros((3,3), dtype = "double")
+    covRGB = np.zeros((3,3), dtype = "float")
     for i in range(len(image)):
         for j in range(len(image[0])):
             vecTemp=[[image[i][j][0] - MoyR], [image[i][j][1]] - MoyG, [image[i][j][2] - MoyB]]
@@ -101,21 +103,25 @@ def Kl(image):
 
 def ReadImage(imageName):
     imagelue = py.imread('./data/' + imageName + ".png")
-    return imagelue.astype('double')
+    return imagelue.astype('float')
+
+def ReadTransformedImage(imageName, quantificatorID):
+    imagelue = py.imread("data_transform/" + imageName + "_" + str(quantificatorID) + ".png")
+    return imagelue.astype('float')
 
 def SaveImage(image, imageName, quantificatorID):
     py.figure(figsize = (10,10))
-    imageout = np.clip(image,0, 255)
-    imageout= imageout.astype('uint8')
+    imageout = np.clip(image,0, 1)
+    imageout= imageout.astype('float')
     py.imsave("data_transform/" + imageName + "_" + str(quantificatorID) + ".png", imageout)
 
-def DoubleToUINT8ImageWithQuantifier(image, quantificator):
+def ApplyQuantificator(image, quantificator):
     # On applique les quantificateur 
     for i in range(len(image)):
         for j in range(len(image[0])):
-            image[i][j][0] = np.uint8(image[i][j][0] * quantificator[0])
-            image [i][j][1] = np.uint8(image[i][j][1] * quantificator[1])
-            image[i][j][2] = np.uint8(image[i][j][2] * quantificator[2])
+            image[i][j][0] = (image[i][j][0] * quantificator[0]/255)
+            image [i][j][1] = (image[i][j][1] * quantificator[1]/255)
+            image[i][j][2] = (image[i][j][2] * quantificator[2]/255)
 
 
 def RGB2YUV(image):
@@ -132,20 +138,34 @@ def RGB2YUV(image):
             imageYUV[i][j][2] = V
     return imageYUV
 
-def RGB2YUV_GPT(image):
-    transformation_matrix = np.array([
-        [ 0.299,  0.587,  0.114 ],
-        [-0.1687, -0.3313,  0.5 ],
-        [ 0.5, -0.4187, -0.0813 ]
-    ])
-    offset = np.array([0, 128, 128])
+# Généré avec une IA générative
+def YUV2RGB(imageYUV):
+    imageRGB = imageYUV
 
-    ycbcr_image = np.dot(image, transformation_matrix.T) + offset
-    return ycbcr_image
+    for i in range(len(imageYUV)):
+        for j in range(len(imageYUV[0])):
+            yuvVec = imageYUV[i][j]
+            Y = yuvVec[0]
+            U = yuvVec[1]
+            V = yuvVec[2]
+
+            R = Y + 1.140 * V
+            G = Y - 0.395 * U - 0.581 * V
+            B = Y + 2.032 * U
+
+            R = max(0, min(255, R))
+            G = max(0, min(255, G))
+            B = max(0, min(255, B))
+
+            imageRGB[i][j][0] = R
+            imageRGB[i][j][1] = G
+            imageRGB[i][j][2] = B
+
+    return imageRGB
 
 def QualityCalculator(image, transformImage):
-    print("PSNR")
-    print(peak_signal_noise_ratio(image, transformImage))
+    # print("PSNR")
+    # print(peak_signal_noise_ratio(image, transformImage))
     print("SSIM")
     print(ssim(image, transformImage))
     return
@@ -153,23 +173,37 @@ def QualityCalculator(image, transformImage):
 def ComputeImage(imageName):
 
     quantificator  = [[255, 255, 255],[255, 255, 15],[255, 255, 0],[255, 15, 15]]
-    for i in range(len(quantificator)):
-        image = ReadImage(imageName)
-        imageNameSave = imageName + "RGB"
-        transformImage = Kl(image)
-        print(imageNameSave)
-        QualityCalculator(image, transformImage)
-        DoubleToUINT8ImageWithQuantifier(transformImage, quantificator[i])
-        SaveImage(transformImage, imageNameSave, i)
+    imageNameVec = []
+    tauxDeCompressionVec = []
+    # psnrVec = []
+    # ssimVec = []
 
     for i in range(len(quantificator)):
         image = ReadImage(imageName)
-        image = RGB2YUV(image)
+        imageNameSave = imageName + "RGB"
+        imageNameVec.append(imageNameSave)
+        transformImage = Kl(image)
+        ApplyQuantificator(transformImage, quantificator[i])
+        SaveImage(transformImage, imageNameSave, i)
+
+        imageTransformed = ReadTransformedImage(imageNameSave, i)
+        ogImageSize = sys.getsizeof(image)
+        transforedImageSize = sys.getsizeof(imageTransformed)
+        tauxDeCompression = 1 - (transforedImageSize/ogImageSize)
+        tauxDeCompressionVec.append(tauxDeCompression)
+        print(f'OG:{ogImageSize}')
+        print(f'Transformed:{transforedImageSize}')
+        print(f'Taux de compresssion:{tauxDeCompression}')
+
+
+    for i in range(len(quantificator)):
+        image = ReadImage(imageName)
         imageNameSave = imageName + "YUV"
         transformImage = Kl(image)
-        print(imageName)
-        QualityCalculator(image, transformImage)
-        DoubleToUINT8ImageWithQuantifier(transformImage, quantificator[i])
+        transformImage = YUV2RGB(transformImage)
+        # QualityCalculator(image, transformImage)
+        ApplyQuantificator(transformImage, quantificator[i])
+
         SaveImage(transformImage, imageNameSave, i)
 
 if __name__ == "__main__":
