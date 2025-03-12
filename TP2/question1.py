@@ -174,6 +174,10 @@ def ComputeImage(imageName):
 
 if __name__ == "__main__":
     ComputeImage("kodim01")
+    ComputeImage("kodim02")
+    ComputeImage("kodim05")
+    ComputeImage("kodim13")
+    ComputeImage("kodim23")
 
 
 
