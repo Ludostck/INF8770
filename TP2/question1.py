@@ -109,22 +109,18 @@ def Kl(image):
 
     return imageRGBsansAxe2
 
-def ReadImage(imageName):
+def LireImage(imageName):
     imagelue = py.imread('./data/' + imageName + ".png")
     return imagelue.astype('double')
 
-def ReadTransformedImage(imageName, quantificatorID):
-    imagelue = py.imread("data_transform/" + imageName + "_" + str(quantificatorID) + ".png")
-    return imagelue.astype('double')
-
-def SaveImage(image, imagePath):
-    py.figure(figsize = (10,10))
+def SavegardeImage(image, imagePath):
+    # py.figure(figsize = (10,10))
     imageout = np.clip(image,0, 1)
     imageout= imageout.astype('double')
     py.imsave(imagePath, imageout)
     py.close()
 
-def ApplyQuantificator(image, quantificator):
+def AppliqueLeQuantificateur(image, quantificator):
     # On applique les quantificateur 
     for i in range(len(image)):
         for j in range(len(image[0])):
@@ -171,12 +167,12 @@ def YUV2RGB(imageYUV):
 
     return imageRGB
 
-def QualityCalculator(image, transformImage):
+def CalculeDeQualite(image, transformImage):
     psnrImage = peak_signal_noise_ratio(image, transformImage)
     ssimImage = ssim(image, transformImage)
     return psnrImage, ssimImage
 
-def ComputeImage(imageName):
+def CalculImage(imageName):
     global tauxDeCompressionRGBMoyen
     global tauxDeCompressionYUVMoyen
     global ssimRGBMoyen
@@ -190,30 +186,31 @@ def ComputeImage(imageName):
     psnrVec = []
     ssimVec = []
 
-    imageRGB = ReadImage(imageName)
+    imageRGB = LireImage(imageName)
     transformImageRGBSansQuantificateur = Kl(imageRGB)
     tailleOriginal = os.path.getsize('./data/' + imageName + ".png")
 
     for i in range(len(quantificator)):
         imageAvecQuantificateur = np.copy(transformImageRGBSansQuantificateur)
-        ApplyQuantificator(imageAvecQuantificateur, quantificator[i])
+        AppliqueLeQuantificateur(imageAvecQuantificateur, quantificator[i])
 
         # Sauvegarde de l'image
         imageNameSave = imageName + "RGB"
         imageNameVec.append(imageNameSave[5:] + "_" + str(i))
 
         imagePath = "./data_transform/" + imageName + "RGB_" + str(i) + ".png"
-        SaveImage(imageAvecQuantificateur, imagePath)
+        SavegardeImage(imageAvecQuantificateur, imagePath)
 
         # Calcul de la qualité de la transformation
-        psnr, ssimImage = QualityCalculator(imageRGB, imageAvecQuantificateur)
-
-        psnrRGBMoyen = psnrRGBMoyen + psnr
-        ssimRGBMoyen = ssimRGBMoyen + ssimImage
+        psnr, ssimImage = CalculeDeQualite(imageRGB, imageAvecQuantificateur)
 
         psnrVec.append(psnr)
         ssimVec.append(ssimImage)
 
+        # On enleve le premier élément RGB qui sera pas modifier et donc a une qualité parfaite
+        if i != 0:
+            psnrRGBMoyen = psnrRGBMoyen + psnr
+            ssimRGBMoyen = ssimRGBMoyen + ssimImage
         # Calcul de compressions
         tailleAprèsModif = os.path.getsize(imagePath)
         taux = 1 - (tailleAprèsModif/tailleOriginal)
@@ -230,25 +227,25 @@ def ComputeImage(imageName):
 
         imageYUVSansQuantificateurCopy = np.copy(transformImageYUVSansQuantificateur)
         # Applique les quantificateurs
-        ApplyQuantificator(imageYUVSansQuantificateurCopy, quantificator[i])
+        AppliqueLeQuantificateur(imageYUVSansQuantificateurCopy, quantificator[i])
         imageAvecQuantificateur = YUV2RGB(imageYUVSansQuantificateurCopy)
 
         # Calcul SSIM et PSNR
-        QualityCalculator(imageRGB, imageAvecQuantificateur)
+        CalculeDeQualite(imageRGB, imageAvecQuantificateur)
         
         # Save image
         imageNameSave = imageName + "YUV"
         imageNameVec.append(imageNameSave[5:] + "_" + str(i))
 
         imagePath = "./data_transform/" + imageName + "YUV_" + str(i) + ".png"
-        SaveImage(imageAvecQuantificateur, imagePath)
+        SavegardeImage(imageAvecQuantificateur, imagePath)
 
         # Calcul de la qualité de la transformation
-        psnr, ssimImage = QualityCalculator(imageRGB, imageAvecQuantificateur)
+        psnr, ssimImage = CalculeDeQualite(imageRGB, imageAvecQuantificateur)
         psnrVec.append(psnr)
         ssimVec.append(ssimImage)
-        # Calcul de compression
 
+        # Calcul de compression
         psnrYUVMoyen = psnrYUVMoyen + psnr
         ssimYUVMoyen = ssimYUVMoyen + ssimImage
 
@@ -261,7 +258,6 @@ def ComputeImage(imageName):
     GraphSSIM(imageNameVec, ssimVec, imageName)
     GraphPSNR(imageNameVec, psnrVec, imageName)
 
-
     # print(imageName)
     # print(imageNameVec)
     # print("Taux de compression")
@@ -271,8 +267,6 @@ def ComputeImage(imageName):
     # print("PSNR")
     # print(psnrVec)
     
-
-
     print(imageName)
     nomImageMeilleurConfig, tauxMeilleurConfig =  MeilleurConfig(imageNameVec, tauxDeCompressionVec, ssimVec)
     print(f"L'image avec le meilleur taux qualité/compression selon ssim est: {nomImageMeilleurConfig}")
@@ -297,11 +291,11 @@ def MeilleurConfig(imageNom, taux, ssimVec):
     return meilleurImage, tauxMeilleurImage
 
 def CalculeImage(): 
-    ComputeImage("kodim01")
-    ComputeImage("kodim02")
-    ComputeImage("kodim05")
-    ComputeImage("kodim13")
-    ComputeImage("kodim23")
+    CalculImage("kodim01")
+    CalculImage("kodim02")
+    CalculImage("kodim05")
+    CalculImage("kodim13")
+    CalculImage("kodim23")
     return 
 
 def GraphCompression(imageNameVec, dataVec, imageName):
@@ -336,11 +330,11 @@ def GraphPSNR(imageNameVec, dataVec, imageName):
 
 if __name__ == "__main__":
     CalculeImage()
-    print(f"Taux de compression RGB moyen: {tauxDeCompressionRGBMoyen/40}")
-    print(f"Taux de compression YUV moyen: {tauxDeCompressionYUVMoyen/40}")
+    print(f"Taux de compression RGB moyen: {tauxDeCompressionRGBMoyen/15}")
+    print(f"Taux de compression YUV moyen: {tauxDeCompressionYUVMoyen/20}")
 
-    print(f"SSIM RGB moyen: {ssimRGBMoyen/40}")
-    print(f"SSIM YUV moyen: {ssimYUVMoyen/40}")
+    print(f"SSIM RGB moyen: {ssimRGBMoyen/15}")
+    print(f"SSIM YUV moyen: {ssimYUVMoyen/20}")
 
-    print(f"PSNR RGB moyen: {psnrRGBMoyen/40}")
-    print(f"PSNR YUV moyen: {psnrYUVMoyen/40}")
+    print(f"PSNR RGB moyen: {psnrRGBMoyen/15}")
+    print(f"PSNR YUV moyen: {psnrYUVMoyen/20}")
