@@ -7,6 +7,14 @@ from skimage.metrics import structural_similarity, peak_signal_noise_ratio
 from scipy.ndimage import convolve
 
 
+tauxDeCompressionRGBMoyen = 0
+tauxDeCompressionYUVMoyen = 0
+
+ssimRGBMoyen = 0
+ssimYUVMoyen = 0
+psnrRGBMoyen = 0
+psnrYUVMoyen = 0
+
 # CHAT gpt generated
 def ssim(image1, image2, window_size=11, C1=1e-4, C2=9e-4):
     """Calcule le SSIM entre deux images, canal par canal"""
@@ -124,7 +132,6 @@ def ApplyQuantificator(image, quantificator):
             image [i][j][1] = (image[i][j][1] * quantificator[1]/255)
             image[i][j][2] = (image[i][j][2] * quantificator[2]/255)
 
-
 def RGB2YUV(image):
     imageYUV = image
 
@@ -170,6 +177,12 @@ def QualityCalculator(image, transformImage):
     return psnrImage, ssimImage
 
 def ComputeImage(imageName):
+    global tauxDeCompressionRGBMoyen
+    global tauxDeCompressionYUVMoyen
+    global ssimRGBMoyen
+    global ssimYUVMoyen
+    global psnrRGBMoyen
+    global psnrYUVMoyen
 
     quantificator  = [[255, 255, 255],[255, 255, 15],[255, 255, 0],[255, 15, 15]]
     imageNameVec = []
@@ -195,12 +208,17 @@ def ComputeImage(imageName):
         # Calcul de la qualité de la transformation
         psnr, ssimImage = QualityCalculator(imageRGB, imageAvecQuantificateur)
 
+        psnrRGBMoyen = psnrRGBMoyen + psnr
+        ssimRGBMoyen = ssimRGBMoyen + ssimImage
+
         psnrVec.append(psnr)
         ssimVec.append(ssimImage)
 
         # Calcul de compressions
         tailleAprèsModif = os.path.getsize(imagePath)
-        tauxDeCompressionVec.append( 1 - (tailleAprèsModif/tailleOriginal))
+        taux = 1 - (tailleAprèsModif/tailleOriginal)
+        tauxDeCompressionVec.append(taux)
+        tauxDeCompressionRGBMoyen = tauxDeCompressionRGBMoyen + taux
 
     # Transforme l'image RGB en YUV
     imageYUV = RGB2YUV(imageRGB)
@@ -231,13 +249,52 @@ def ComputeImage(imageName):
         ssimVec.append(ssimImage)
         # Calcul de compression
 
+        psnrYUVMoyen = psnrYUVMoyen + psnr
+        ssimYUVMoyen = ssimYUVMoyen + ssimImage
+
         tailleAprèsModif = os.path.getsize(imagePath)
-        tauxDeCompressionVec.append(1 - (tailleAprèsModif/tailleOriginal))
+        taux = 1 - (tailleAprèsModif/tailleOriginal)
+        tauxDeCompressionVec.append(taux)
+        tauxDeCompressionYUVMoyen = tauxDeCompressionYUVMoyen + taux
 
     GraphCompression(imageNameVec, tauxDeCompressionVec, imageName)
     GraphSSIM(imageNameVec, ssimVec, imageName)
     GraphPSNR(imageNameVec, psnrVec, imageName)
-    return
+
+
+    # print(imageName)
+    # print(imageNameVec)
+    # print("Taux de compression")
+    # print(tauxDeCompressionVec)
+    # print("SSIM")
+    # print(ssimVec)
+    # print("PSNR")
+    # print(psnrVec)
+    
+
+
+    print(imageName)
+    nomImageMeilleurConfig, tauxMeilleurConfig =  MeilleurConfig(imageNameVec, tauxDeCompressionVec, ssimVec)
+    print(f"L'image avec le meilleur taux qualité/compression selon ssim est: {nomImageMeilleurConfig}")
+    print(f"Le taux est de: {tauxMeilleurConfig}")
+
+    nomImageMeilleurConfig, tauxMeilleurConfig =  MeilleurConfig(imageNameVec, tauxDeCompressionVec, psnrVec)
+    print(f"L'image avec le meilleur taux qualité/compression selon psnr est: {nomImageMeilleurConfig}")
+    print(f"Le taux est de: {tauxMeilleurConfig}")
+    return 
+
+def MeilleurConfig(imageNom, taux, ssimVec):
+    meilleurImage = imageNom[0]
+    tauxMeilleurImage = ssimVec[0]/taux[0]
+    for i in range(len(taux)):
+        if i == 0:
+            continue
+        tauxTemp = ssimVec[i] / taux[i]
+        if tauxTemp >= tauxMeilleurImage:
+            tauxMeilleurImage = tauxTemp
+            meilleurImage = imageNom[i]
+
+    return meilleurImage, tauxMeilleurImage
 
 def CalculeImage(): 
     ComputeImage("kodim01")
@@ -279,3 +336,11 @@ def GraphPSNR(imageNameVec, dataVec, imageName):
 
 if __name__ == "__main__":
     CalculeImage()
+    print(f"Taux de compression RGB moyen: {tauxDeCompressionRGBMoyen/40}")
+    print(f"Taux de compression YUV moyen: {tauxDeCompressionYUVMoyen/40}")
+
+    print(f"SSIM RGB moyen: {ssimRGBMoyen/40}")
+    print(f"SSIM YUV moyen: {ssimYUVMoyen/40}")
+
+    print(f"PSNR RGB moyen: {psnrRGBMoyen/40}")
+    print(f"PSNR YUV moyen: {psnrYUVMoyen/40}")
